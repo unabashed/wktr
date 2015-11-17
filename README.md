@@ -1,4 +1,4 @@
-# witr
+# wktr
 
 > Translate at the command line using Wiktionary's translations.
 

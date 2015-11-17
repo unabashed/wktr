@@ -1,0 +1,148 @@
+#!/bin/bash
+
+#--------------------------------------------------------------------------
+#
+#                                  ▌  ▐     
+#                              ▌  ▌▌▗▘▜▀ ▙▀▖
+#                              ▐▐▐ ▛▚ ▐ ▖▌  
+#                               ▘▘ ▘ ▘ ▀ ▘  
+#
+# Description:
+#   Translate a term by looking it up in Wiktionary
+#
+#--------------------------------------------------------------------------
+#
+# Found this useful? Appalling? Appealing? Please let me know.
+# The Unabashed welcomes your impressions. 
+#
+# You will find the
+#   unabashed
+# at the location opposite to
+#   moc • thgimliam
+#
+#--------------------------------------------------------------------------
+#
+# License:
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+#--------------------------------------------------------------------------
+
+
+# Program name from its filename
+prog=${0##*/}
+
+# Some colors
+LIGHTRED='\e[1;31m'
+LIGHTPURPLE='\e[1;35m'
+YELLOW='\e[1;33m'
+NC='\e[0m'  
+
+# Calling for help is the same as calling without arguments.
+case $1 in --help|-[h?])  $prog; exit 1  ;; esac
+
+# Usage if less than three arguments are given
+[[ $# -lt 3 ]] && {
+    clear
+    echo -e "
+${LIGHTRED}Description:${NC}
+    Translate a term by looking it up in Wiktionary
+
+${LIGHTRED}Usage:${NC}
+    ${YELLOW}$prog [lang_origin] [lang_destination] terms${NC}
+
+${LIGHTRED}Examples:${NC}
+    Try this for English-to-Estonian translations:
+    ${YELLOW}$prog en et apple keyboard \"thank you\"${NC}
+    [en] apple        [et] õun
+    [en] keyboard     [et] klaviatuur
+    [en] thank you    [et] aitäh ·· aitüma ·· tänan ·· täname
+
+    Try this for English-to-Japanese translations:
+    ${YELLOW}$prog en ja melon ice sushi${NC}
+    [en] melon    [ja] メロン
+    [en] ice      [ja] 氷 ·· アイス ·· ドライアイス ·· アイス ·· アイス ·· 凍る
+    [en] sushi    [ja] 鮨 ·· 鮓 ·· 寿司 ·· すし
+
+${LIGHTRED}Limitations:${NC}
+    Doesn't behave well with some languages with different dialects, like Chinese.
+
+${LIGHTRED}Dependencies:${NC}
+    Must have curl and xsel installed.
+    Try ${YELLOW}sudo apt-get install curl xsel${NC}
+    "
+    exit 1
+}
+
+
+#----------------------------------------------------------------------------
+# Check for missing commands
+needed_commands="curl sed xsel"
+
+missing_counter=0
+for needed_command in $needed_commands; do
+    if ! hash "$needed_command" >/dev/null 2>&1; then
+        printf "Command not found in PATH: %s\n" "$needed_command" >&2
+        : $((missing_counter++))
+    fi
+done
+
+if [[ $missing_counter -eq 1 ]]; then
+    printf "At least %d command is missing, install it\n" "$missing_counter" >&2
+    exit 1
+elif [[ $missing_counter -gt 1 ]]; then
+    printf "At least %d commands are missing, install them\n" "$missing_counter" >&2
+    exit 2
+fi
+#----------------------------------------------------------------------------
+
+lang_orig="$1"
+lang_dest="$2"
+shift 2
+
+# Temp files
+mkdir -p $HOME/tmp  &&  
+tmpfile=$(mktemp --tmpdir=$HOME/tmp ${PROG}.XXXXXXXXXX)
+
+while [[ $# -ne 0 ]]
+do
+    term_orig="$1"
+    term_dest=$(\
+        curl -s -L "https://$lang_orig.wiktionary.org/wiki/$term_orig" | 
+            sed 's/<span class/\n&/g' | 
+            sed '/class=.extiw/d' |
+            grep "lang=.$lang_dest." | 
+            sed 's/ title/\ntitle/g' | 
+            grep -oP 'title="[^"]*">[^<]*(?=<.a><.span>)' | 
+            sed 's/.*>//' |
+            sed "s/ (page does not exist)//g" |
+            sed "s/$lang_dest://g" | 
+            sed "s,Special:Search/,,g" |
+            sed ':a;$!N;s/ *\n\+ */ ·· /;ta;')
+
+    input="[$lang_orig] $term_orig"
+    [[ "$term_dest" == "" ]] &&
+        output="[$lang_dest] * not found *" ||
+        output="[$lang_dest] $term_dest"
+
+    echo "$input = $output" >> $tmpfile
+    shift
+done
+
+<$tmpfile  column -s= -t 
+rm $tmpfile
+
+exit 0
+
+#------------------END of PROGRAM----------------------------
+
